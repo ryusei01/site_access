@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+*.db
+*.sqlite3
+
+# FastAPI / Uvicorn
+*.log
+
+# Node / React
+node_modules/
+dist/
+build/
+.env
