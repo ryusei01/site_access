@@ -129,12 +129,8 @@ def run_all():
 
     # FastAPI 起動
     threading.Thread(target=start_fastapi, daemon=True).start()
-    if wait_for_port("127.0.0.1", FASTAPI_PORT, timeout=20):
-        # React 起動
-        threading.Thread(target=start_react, daemon=True).start()
-        threading.Thread(target=open_browser_when_ready, daemon=True).start()
-    else:
-        log("FastAPI did not start in time.", color="red")
+    threading.Thread(target=start_react, daemon=True).start()
+    threading.Thread(target=open_browser_when_ready, daemon=True).start()
 
 # ===== Exit ボタン =====
 def stop_all():

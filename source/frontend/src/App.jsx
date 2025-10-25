@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 export default function App() {
-  const [url, setUrl] = useState(
-    "https://t.pia.jp/pia/ticketInformation.do?eventCd=2525151&rlsCd=001"
-  );
+  const [url, setUrl] = useState(import.meta.env.VITE_TARGETURL || "");
   const [targetTime, setTargetTime] = useState(
     import.meta.env.VITE_TARGETTIME || ""
   );

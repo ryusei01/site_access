@@ -86,24 +86,24 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
     driver.get(url)
     time.sleep(0.5)
 
-    # ターゲット時間待機
+    # ターゲット時間待機（高精度）
     target_time = datetime.datetime.strptime(target_time_str, "%Y-%m-%d %H:%M:%S")
-    now = datetime.datetime.now()
-    remaining = (target_time - now).total_seconds()
-    if remaining <= 0:
-        ws_log("[INFO] Target time already passed. Executing immediately.")
-    else:
-        ws_log(f"[INFO] Waiting for target time: {target_time} ({remaining:.3f}s left)")
-        while remaining > 0:
-            time.sleep(min(remaining, 0.5))
-            now = datetime.datetime.now()
-            remaining = (target_time - now).total_seconds()
 
-    ws_log("[INFO] Target time reached. Accessing page...")
+    while True:
+        now = datetime.datetime.now()
+        remaining = (target_time - now).total_seconds()
+        if remaining <= 0:
+            break
+
+        # 残り時間に応じて短いスリープで待機
+        sleep_time = min(0.01, max(remaining, 0.001))  # 1ms〜10ms
+        time.sleep(sleep_time)
+
+    # 時間になったらアクセス
     driver.get(url)
+    ws_log(f"[INFO] Target time reached. Accessing page at {datetime.datetime.now()}")
 
-    # ボタン探索（高速）
-    ws_log("[INFO] Searching for the button...")
+    # ボタン探索（高速クリック）
     max_wait = 10
     start = time.time()
     clicked = False
@@ -115,19 +115,21 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
                 if any(k.lower() in text.lower() for k in button_keywords):
                     element.click()
                     clicked = True
-                    now = datetime.datetime.now()
-                    log_queue.put(f"[INFO] Button clicked: '{text}', {now}")
+                    ws_log(f"[INFO] Button clicked: '{text}' at {datetime.datetime.now()}")
                     break
             if clicked:
                 break
-        except:
-            pass
+        except Exception as e:
+            ws_log(f"[WARN] Exception while searching buttons: {e}")
         time.sleep(0.01)
 
     if not clicked:
         ws_log("[WARN] No matching button found.")
 
     ws_log("[INFO] Selenium task finished.")
-    # ===== WebSocket送信用タスク開始 =====
+
+# ===== WebSocket送信用タスク開始 =====
+@app.on_event("startup")
+async def startup_event():
     asyncio.create_task(websocket_log_sender())
 
