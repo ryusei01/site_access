@@ -202,7 +202,39 @@ def select_seat_type(driver, seat_preference, ws_log):
             except:
                 pass
 
-            # 方法2: 通常のボタンを探す（古いパターン）
+            # 方法2: XPathで席名テキストを含むdiv要素を探す（フォールバック）
+            try:
+                # 席名を含むテキストを持つ要素を探す
+                seat_elements = driver.find_elements(By.XPATH, f"//*[contains(text(), '{pref}席')]")
+                for elem in seat_elements:
+                    try:
+                        elem_text = elem.text.strip()
+
+                        # 完全一致または部分一致チェック
+                        if f"{pref}席" == elem_text or f"{pref}席" in elem_text:
+                            # 親のselector要素を探す
+                            try:
+                                selector = elem.find_element(By.XPATH, "./ancestor::div[contains(@class, 'selector')]")
+                            except:
+                                # selectorがない場合、クリック可能な親要素を探す
+                                selector = elem.find_element(By.XPATH, "./ancestor::*[contains(@class, 'seat') or contains(@class, 'ticket')]")
+
+                            # disabledチェック
+                            class_attr = selector.get_attribute('class') or ''
+                            if 'disabled' in class_attr.lower():
+                                ws_log(f"[INFO] {pref} seat is disabled, trying next preference")
+                                break
+
+                            selector.click()
+                            ws_log(f"[SUCCESS] Selected {pref} seat via XPath")
+                            time.sleep(0.2)
+                            return True
+                    except:
+                        continue
+            except:
+                pass
+
+            # 方法3: ボタンを探す（最終フォールバック）
             try:
                 buttons = driver.find_elements(By.TAG_NAME, "button")
                 for button in buttons:
