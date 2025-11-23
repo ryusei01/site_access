@@ -16,6 +16,16 @@ export default function App() {
   const [profileName, setProfileName] = useState(
     import.meta.env.VITE_PROFILENAME || ""
   );
+  const [blockKeywords, setBlockKeywords] = useState(
+    import.meta.env.VITE_BLOCK_KEYWORDS || ""
+  );
+  const [ticketQuantity, setTicketQuantity] = useState(
+    import.meta.env.VITE_TICKET_QUANTITY || "1"
+  );
+  const [autoProceed, setAutoProceed] = useState(true);
+  const [seatPreference, setSeatPreference] = useState(
+    import.meta.env.VITE_SEAT_PREFERENCE || ""
+  );
   const [logs, setLogs] = useState([]);
   const wsRef = useRef(null);
 
@@ -69,6 +79,10 @@ export default function App() {
     formData.append("chrome_path", chromePath);
     formData.append("user_data_dir", userDataDir);
     formData.append("profile_name", profileName);
+    formData.append("block_keywords", blockKeywords);
+    formData.append("ticket_quantity", ticketQuantity);
+    formData.append("auto_proceed", autoProceed);
+    formData.append("seat_preference", seatPreference);
 
     await fetch("http://127.0.0.1:8000/run", {
       method: "POST",
@@ -91,6 +105,34 @@ export default function App() {
         <br />
         Button Keywords (comma separated):{" "}
         <input value={keywords} onChange={(e) => setKeywords(e.target.value)} />
+        <br />
+        Block Keywords (comma separated, optional):{" "}
+        <input
+          value={blockKeywords}
+          onChange={(e) => setBlockKeywords(e.target.value)}
+        />
+        <br />
+        Ticket Quantity:{" "}
+        <input
+          type="number"
+          min="1"
+          max="10"
+          value={ticketQuantity}
+          onChange={(e) => setTicketQuantity(e.target.value)}
+        />
+        <br />
+        Seat Preference (comma separated, e.g., "SS,S,A,Premium"):{" "}
+        <input
+          value={seatPreference}
+          onChange={(e) => setSeatPreference(e.target.value)}
+        />
+        <br />
+        Auto Proceed to Payment:{" "}
+        <input
+          type="checkbox"
+          checked={autoProceed}
+          onChange={(e) => setAutoProceed(e.target.checked)}
+        />
         <br />
         ChromeDriver Path:{" "}
         <input
