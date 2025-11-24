@@ -65,13 +65,15 @@ async def run_script(
     ticket_quantity: int = Form(1),  # チケット枚数（デフォルト1枚）
     auto_proceed: bool = Form(False),  # お支払いボタン自動クリック
     seat_preference: str = Form(""),  # 席種の優先順位（例: "SS,S,A"）
+    wait_for_recaptcha: bool = Form(True),  # reCAPTCHA検出時に待機するか
+    stop_after_first_click: bool = Form(False),  # 最初のボタンクリック後に停止
 ):
     log_queue.put(f"[INFO] Run called with URL: {url}")
     asyncio.create_task(asyncio.to_thread(
         selenium_task,
         url, target_time, button_keywords.split(","), chrome_path, user_data_dir, profile_name,
         block_keywords.split(",") if block_keywords else [],
-        ticket_quantity, auto_proceed, seat_preference
+        ticket_quantity, auto_proceed, seat_preference, wait_for_recaptcha, stop_after_first_click
     ))
     return {"status": "started"}
 
@@ -316,7 +318,7 @@ def click_confirm_button(driver, ws_log):
         return False
 
 # ===== 最終確認処理関数 =====
-def final_confirmation(driver, ws_log):
+def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
     """
     チェックボックスにチェックを入れて「この内容で申し込む」ボタンをクリック
     """
@@ -325,16 +327,19 @@ def final_confirmation(driver, ws_log):
         time.sleep(0.5)  # ページ読み込み待機
 
         # reCAPTCHAチェック（チェックボックスの前）
-        try:
-            recaptcha_frames = driver.find_elements(By.XPATH, "//iframe[contains(@src, 'recaptcha') or contains(@title, 'reCAPTCHA')]")
-            if len(recaptcha_frames) > 0:
-                ws_log("[WARN] reCAPTCHA detected on final confirmation page!")
-                ws_log("[INFO] Please solve the reCAPTCHA manually.")
-                ws_log("[INFO] Waiting 90 seconds for manual reCAPTCHA solving...")
-                time.sleep(90)  # ユーザーが手動で解決する時間を与える
-                ws_log("[INFO] Proceeding to checkbox and submit...")
-        except Exception as e:
-            ws_log(f"[DEBUG] reCAPTCHA check completed: {e}")
+        if wait_for_recaptcha:
+            try:
+                recaptcha_frames = driver.find_elements(By.XPATH, "//iframe[contains(@src, 'recaptcha') or contains(@title, 'reCAPTCHA')]")
+                if len(recaptcha_frames) > 0:
+                    ws_log("[WARN] reCAPTCHA detected on final confirmation page!")
+                    ws_log("[INFO] Please solve the reCAPTCHA manually.")
+                    ws_log("[INFO] Waiting 90 seconds for manual reCAPTCHA solving...")
+                    time.sleep(90)  # ユーザーが手動で解決する時間を与える
+                    ws_log("[INFO] Proceeding to checkbox and submit...")
+            except Exception as e:
+                ws_log(f"[DEBUG] reCAPTCHA check completed: {e}")
+        else:
+            ws_log("[INFO] reCAPTCHA wait is disabled, proceeding without waiting...")
 
         # チェックボックスを探してチェック（tpl-checkboxカスタム要素対応）
         try:
@@ -491,7 +496,7 @@ def find_button_in_block(driver, block_keywords, button_keywords, ws_log):
         return False
 
 # ===== Seleniumタスク =====
-def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_dir, profile_name, block_keywords=None, ticket_quantity=1, auto_proceed=False, seat_preference=""):
+def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_dir, profile_name, block_keywords=None, ticket_quantity=1, auto_proceed=False, seat_preference="", wait_for_recaptcha=True, stop_after_first_click=False):
     def ws_log(msg):
         log_queue.put(msg)
 
@@ -566,6 +571,12 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
         ws_log("[INFO] Button clicked successfully. Waiting for page to load...")
         time.sleep(0.8)  # ページ遷移待機を短縮（1.5秒 → 0.8秒）
 
+        # 最初のボタンクリック後に停止するオプション
+        if stop_after_first_click:
+            ws_log("[INFO] stop_after_first_click is enabled. Stopping here.")
+            ws_log("[INFO] Selenium task finished.")
+            return
+
         # 席種選択
         if seat_preference and seat_preference.strip():
             ws_log(f"[INFO] Selecting seat type: {seat_preference}")
@@ -590,7 +601,7 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
 
                     # 最終確認（チェックボックス + 申し込むボタン）
                     time.sleep(0.5)
-                    if final_confirmation(driver, ws_log):
+                    if final_confirmation(driver, ws_log, wait_for_recaptcha):
                         ws_log("[SUCCESS] Final confirmation completed!")
                     else:
                         ws_log("[WARN] Final confirmation failed")

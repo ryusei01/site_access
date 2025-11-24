@@ -26,6 +26,12 @@ export default function App() {
   const [seatPreference, setSeatPreference] = useState(
     import.meta.env.VITE_SEAT_PREFERENCE || ""
   );
+  const [waitForRecaptcha, setWaitForRecaptcha] = useState(
+    import.meta.env.VITE_WAIT_FOR_RECAPTCHA || true
+  );
+  const [stopAfterFirstClick, setStopAfterFirstClick] = useState(
+    import.meta.env.VITE_STOP_AFTER_FIRST_CLICK || false
+  );
   const [logs, setLogs] = useState([]);
   const wsRef = useRef(null);
 
@@ -83,6 +89,8 @@ export default function App() {
     formData.append("ticket_quantity", ticketQuantity);
     formData.append("auto_proceed", autoProceed);
     formData.append("seat_preference", seatPreference);
+    formData.append("wait_for_recaptcha", waitForRecaptcha);
+    formData.append("stop_after_first_click", stopAfterFirstClick);
 
     await fetch("http://127.0.0.1:8000/run", {
       method: "POST",
@@ -132,6 +140,20 @@ export default function App() {
           type="checkbox"
           checked={autoProceed}
           onChange={(e) => setAutoProceed(e.target.checked)}
+        />
+        <br />
+        Wait for reCAPTCHA (90 seconds):{" "}
+        <input
+          type="checkbox"
+          checked={waitForRecaptcha}
+          onChange={(e) => setWaitForRecaptcha(e.target.checked)}
+        />
+        <br />
+        Stop After First Click (for testing):{" "}
+        <input
+          type="checkbox"
+          checked={stopAfterFirstClick}
+          onChange={(e) => setStopAfterFirstClick(e.target.checked)}
         />
         <br />
         ChromeDriver Path:{" "}
