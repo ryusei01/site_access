@@ -35,6 +35,7 @@ def log(msg, color="black"):
 
 # ===== ポート待機 =====
 def wait_for_port(host, port, timeout=30):
+    count = 1
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -42,6 +43,9 @@ def wait_for_port(host, port, timeout=30):
                 return True
         except OSError:
             time.sleep(0.2)
+            if count < 5:
+                wait_for_port(host, port, timeout)
+                count += 1
     return False
 
 # ===== プロセスログ読み取り =====
@@ -59,6 +63,12 @@ def read_output(proc, color="black"):
 def start_react():
     global react_proc
     log("Starting React (Vite)...", color="blue")
+
+    # ポート5173をkillしてから起動
+    log(f"Checking port {REACT_PORT}...", color="purple")
+    kill_process_by_port(REACT_PORT)
+    time.sleep(0.5)
+
     react_proc = subprocess.Popen(
         [r"C:\Program Files\nodejs\npm.cmd", "run", "dev", "--", "--host"],
         cwd=FRONTEND_DIR,
@@ -71,8 +81,14 @@ def start_react():
 def start_fastapi():
     global fastapi_proc
     log("Starting FastAPI...", color="blue")
+
+    # ポート8000をkillしてから起動
+    log(f"Checking port {FASTAPI_PORT}...", color="purple")
+    kill_process_by_port(FASTAPI_PORT)
+    time.sleep(0.5)
+
     fastapi_proc = subprocess.Popen(
-        ["uvicorn", "main:app", "--reload"],
+        ["uvicorn", "main:app"],
         cwd=BACKEND_DIR,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True

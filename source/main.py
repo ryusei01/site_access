@@ -33,13 +33,16 @@ log_queue = queue.Queue()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    print(f"[WebSocket] New connection attempt from {websocket.client}")
     await websocket.accept()
+    print(f"[WebSocket] Connection accepted")
     connections.append(websocket)
     try:
         while True:
             data = await websocket.receive_text()
             await websocket.send_text(f"Echo: {data}")
     except WebSocketDisconnect:
+        print(f"[WebSocket] Connection disconnected")
         connections.remove(websocket)
 
 # バックグラウンドでキューからWebSocketに送信
@@ -69,6 +72,10 @@ async def run_script(
     stop_after_first_click: bool = Form(False),  # 最初のボタンクリック後に停止
 ):
     log_queue.put(f"[INFO] Run called with URL: {url}")
+    log_queue.put(f"[INFO] Parameters received in /run endpoint:")
+    log_queue.put(f"[INFO]   auto_proceed={auto_proceed} (type: {type(auto_proceed).__name__})")
+    log_queue.put(f"[INFO]   wait_for_recaptcha={wait_for_recaptcha} (type: {type(wait_for_recaptcha).__name__})")
+    log_queue.put(f"[INFO]   stop_after_first_click={stop_after_first_click} (type: {type(stop_after_first_click).__name__})")
     asyncio.create_task(asyncio.to_thread(
         selenium_task,
         url, target_time, button_keywords.split(","), chrome_path, user_data_dir, profile_name,
@@ -417,7 +424,9 @@ def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
         except Exception as e:
             ws_log(f"[ERROR] Error in checkbox handling: {e}")
 
-        time.sleep(0.3)
+        # チェックボックス確認後、人間らしい待機時間（1.0〜1.5秒）
+        ws_log("[INFO] Waiting before clicking submit button (human-like delay)...")
+        time.sleep(1.2)
 
         # フッター内の「この内容で申し込む」ボタンを探す
         try:
@@ -429,8 +438,11 @@ def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
                 button_text = button.text.strip()
                 ws_log(f"[DEBUG] Footer button text: '{button_text}'")
                 if "この内容で申し込む" in button_text or "申し込む" in button_text:
+                    # ボタンクリック前に少し待機（0.3〜0.5秒）
+                    time.sleep(0.4)
                     button.click()
                     ws_log(f"[SUCCESS] Final submit button clicked: '{button_text}'")
+                    time.sleep(0.5)  # クリック後も少し待機
                     return True
 
             # フッター内に見つからない場合、全体を検索
@@ -439,12 +451,16 @@ def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
             for button in all_buttons:
                 button_text = button.text.strip()
                 if "この内容で申し込む" in button_text:
+                    # ボタンクリック前に少し待機（0.3〜0.5秒）
+                    time.sleep(0.4)
                     button.click()
                     ws_log(f"[SUCCESS] Final submit button clicked: '{button_text}'")
+                    time.sleep(0.5)  # クリック後も少し待機
                     return True
 
             ws_log("[WARN] Final submit button not found")
             return False
+
         except Exception as e:
             ws_log(f"[ERROR] Failed to click final submit button: {e}")
             return False
@@ -501,6 +517,7 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
         log_queue.put(msg)
 
     ws_log("[INFO] Starting Selenium task...")
+    ws_log(f"[INFO] selenium_task received stop_after_first_click={stop_after_first_click} (type: {type(stop_after_first_click).__name__})")
     options = Options()
     options.add_argument(f"--user-data-dir={user_data_dir}")
     options.add_argument(f"--profile-directory={profile_name}")
@@ -562,9 +579,42 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
         time.sleep(0.01)
 
     if not clicked:
-        ws_log("[WARN] No matching button found.")
-        ws_log("[INFO] Selenium task finished.")
-        return
+        ws_log("[WARN] No matching button found, reloading page...")
+        driver.refresh()
+        time.sleep(2.0)  # リロード後の待機
+        ws_log("[INFO] Page reloaded, retrying button search...")
+
+        # リロード後に再度検索
+        max_wait_retry = 10
+        start_retry = time.time()
+        while time.time() - start_retry < max_wait_retry:
+            try:
+                if use_block_search:
+                    # ブロック内検索
+                    clicked = find_button_in_block(driver, block_keywords, button_keywords, ws_log)
+                    if clicked:
+                        ws_log(f"[SUCCESS] Button found and clicked after reload")
+                        break
+                else:
+                    # 通常のボタン検索
+                    elements = driver.find_elements(By.TAG_NAME, "button") + driver.find_elements(By.TAG_NAME, "a")
+                    for element in elements:
+                        text = element.text.strip()
+                        if any(k.strip().lower() in text.lower() for k in button_keywords if k.strip()):
+                            element.click()
+                            clicked = True
+                            ws_log(f"[SUCCESS] Button clicked after reload: '{text}'")
+                            break
+                    if clicked:
+                        break
+            except Exception as e:
+                ws_log(f"[WARN] Exception while searching buttons after reload: {e}")
+            time.sleep(0.01)
+
+        if not clicked:
+            ws_log("[ERROR] No matching button found even after reload")
+            ws_log("[INFO] Selenium task finished.")
+            return
 
     # ボタンクリック成功後の処理
     if clicked:
@@ -572,6 +622,7 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
         time.sleep(0.8)  # ページ遷移待機を短縮（1.5秒 → 0.8秒）
 
         # 最初のボタンクリック後に停止するオプション
+        ws_log(f"[INFO] Checking stop_after_first_click condition: {stop_after_first_click} (type: {type(stop_after_first_click).__name__})")
         if stop_after_first_click:
             ws_log("[INFO] stop_after_first_click is enabled. Stopping here.")
             ws_log("[INFO] Selenium task finished.")
@@ -617,3 +668,6 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
 async def startup_event():
     asyncio.create_task(websocket_log_sender())
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)

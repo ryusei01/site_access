@@ -27,10 +27,10 @@ export default function App() {
     import.meta.env.VITE_SEAT_PREFERENCE || ""
   );
   const [waitForRecaptcha, setWaitForRecaptcha] = useState(
-    import.meta.env.VITE_WAIT_FOR_RECAPTCHA || true
+    import.meta.env.VITE_WAIT_FOR_RECAPTCHA == "false" ? false : true
   );
   const [stopAfterFirstClick, setStopAfterFirstClick] = useState(
-    import.meta.env.VITE_STOP_AFTER_FIRST_CLICK || false
+    import.meta.env.VITE_STOP_AFTER_FIRST_CLICK == "true" ? true : false
   );
   const [logs, setLogs] = useState([]);
   const wsRef = useRef(null);
@@ -39,7 +39,7 @@ export default function App() {
     console.log(import.meta.env.VITE_TARGETTIME);
     let ws;
     let retries = 0;
-    const maxRetries = 10;
+    const maxRetries = 50;
 
     const connect = () => {
       if (retries >= maxRetries) return;
