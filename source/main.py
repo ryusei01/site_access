@@ -7,6 +7,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 import queue
 import threading
 
@@ -327,7 +328,7 @@ def click_confirm_button(driver, ws_log):
 # ===== 最終確認処理関数 =====
 def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
     """
-    チェックボックスにチェックを入れて「この内容で申し込む」ボタンをクリック
+    チェックボックスにチェックを入れて「この内容で申込む」ボタンをクリック
     """
     try:
         ws_log("[INFO] Starting final confirmation...")
@@ -428,7 +429,7 @@ def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
         ws_log("[INFO] Waiting before clicking submit button (human-like delay)...")
         time.sleep(1.2)
 
-        # フッター内の「この内容で申し込む」ボタンを探す
+        # フッター内の「この内容で申込む」ボタンを探す
         try:
             # フッター内のボタンを優先的に探す
             footer_buttons = driver.find_elements(By.XPATH, "//footer//button")
@@ -437,7 +438,7 @@ def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
             for button in footer_buttons:
                 button_text = button.text.strip()
                 ws_log(f"[DEBUG] Footer button text: '{button_text}'")
-                if "この内容で申し込む" in button_text or "申し込む" in button_text:
+                if "この内容で申込む" in button_text or "申し込む" in button_text:
                     # ボタンクリック前に少し待機（0.3〜0.5秒）
                     time.sleep(0.4)
                     button.click()
@@ -450,7 +451,7 @@ def final_confirmation(driver, ws_log, wait_for_recaptcha=True):
             all_buttons = driver.find_elements(By.TAG_NAME, "button")
             for button in all_buttons:
                 button_text = button.text.strip()
-                if "この内容で申し込む" in button_text:
+                if "この内容で申込む" in button_text:
                     # ボタンクリック前に少し待機（0.3〜0.5秒）
                     time.sleep(0.4)
                     button.click()
@@ -522,7 +523,14 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
     options.add_argument(f"--user-data-dir={user_data_dir}")
     options.add_argument(f"--profile-directory={profile_name}")
     options.add_experimental_option("detach", True)
-    service = Service(chrome_path)
+    # ChromeDriverを自動的にダウンロード・管理（Chromeのバージョンに自動対応）
+    try:
+        service = Service(ChromeDriverManager().install())
+        ws_log("[INFO] Using webdriver-manager to auto-download ChromeDriver")
+    except Exception as e:
+        # フォールバック: 指定されたパスを使用
+        ws_log(f"[WARN] webdriver-manager failed, using provided path: {e}")
+        service = Service(chrome_path)
     driver = webdriver.Chrome(service=service, options=options)
 
     ws_log("[INFO] Chrome ready.")
@@ -662,6 +670,16 @@ def selenium_task(url, target_time_str, button_keywords, chrome_path, user_data_
                 ws_log("[WARN] Could not find payment button")
 
     ws_log("[INFO] Selenium task finished.")
+    
+    # stop_after_first_click=Falseの場合、ブラウザを開いたままにする
+    if not stop_after_first_click:
+        ws_log("[INFO] Keeping browser open. Press Ctrl+C to close.")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            ws_log("[INFO] Closing browser...")
+            driver.quit()
 
 # ===== WebSocket送信用タスク開始 =====
 @app.on_event("startup")
